@@ -1,0 +1,93 @@
+#!/bin/bash
+
+### BEGIN INIT INFO
+# Provides: 		PersonnalFirewall
+# Required-Start: 	$remote_fs $syslog
+# Required-Stop: 	$remote_fs $syslog
+# Default-Start: 	2 3 4 5
+# Default-Stop: 	0 1 6
+# Short-Description:	Start Firewall at boot time
+# Description:	 	Enable the Firewall
+### END INIT INFO
+
+IPT=/sbin/iptables
+
+HOME=XX.XX.XX.XX
+LAPTOP=XX.XX.XX.XX
+
+$IPT -F
+$IPT -X
+
+# Drops all current rules
+
+$IPT -t filter -F
+$IPT -t filter -X
+$IPT -t nat -F
+$IPT -t nat -X
+$IPT -t mangle -F
+$IPT -t mangle -X
+  
+# Default strategy : blocking evertyhing
+
+$IPT -t filter -P INPUT DROP
+$IPT -t filter -P FORWARD DROP
+$IPT -t filter -P OUTPUT DROP
+
+# Loopback
+
+$IPT -t filter -A INPUT -i lo -j ACCEPT
+$IPT -t filter -A OUTPUT -o lo -j ACCEPT
+
+# Allow open connections, and its related connections to accept inputs
+
+$IPT -t filter -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+# And outputs
+
+$IPT -A OUTPUT -m state ! --state INVALID -j ACCEPT
+
+# Allow ICMP (ping...)
+
+$IPT -A INPUT -p icmp -j ACCEPT
+
+# Allow IGMP (Multicast...)
+
+$IPT -A INPUT -p igmp -j ACCEPT
+
+# Allow the ssh server to be accesible from outside
+#
+#$IPT -A INPUT -p tcp --dport ssh -J ACCEPT
+#
+# Drop the XMAS scans and NULL
+
+$IPT -A INPUT -p tcp --tcp-flags FIN,URG,PSH FIN,URG,PSH -j DROP
+$IPT -A INPUT -p tcp --tcp-flags ALL ALL -j DROP
+$IPT -A INPUT -p tcp --tcp-flags ALL NONE -j DROP
+$IPT -A INPUT -p tcp --tcp-flags SYN,RST SYN,RST -j DROP
+
+# Drop broadcasted packets
+
+$IPT -A INPUT -m pkttype --pkt-type broadcast -j DROP
+
+# DNS:53 (before hosts name use)
+
+$IPT -t filter -A INPUT -p tcp --dport 53 -j ACCEPT
+$IPT -t filter -A INPUT -p udp --dport 53 -j ACCEPT
+
+# Accept exeverything from ip in tcp
+
+$IPT -t filter -A INPUT -p tcp -s $HOME -j ACCEPT
+$IPT -t filter -A INPUT -p tcp -s $LAPTOP -j ACCEPT
+
+# Logs the input packets
+
+$IPT -A INPUT -j LOG --log-prefix "unexpected IPv4 packet"
+
+# Logs the forward packets
+
+$IPT -A FORWARD -j LOG
+
+# END OF FIREWALL
+
+exit 0
+
